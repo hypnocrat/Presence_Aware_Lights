@@ -111,14 +111,19 @@ action:
       active_states: ["occupied"]
 
   ###########################################################################
-  # 1 — Optional disable sensors
+  # 1 — Optional disable sensors (Cleaner Logic)
   ###########################################################################
-  - choose:
-      - conditions:
+  - if:
+      # This condition is true ONLY if the user selected at least one sensor
+      - condition: template
+        value_template: "{{ disable_sensors | length > 0 }}"
+    then:
+      # Now, check if ANY of the selected sensors are 'on'
+      - if:
           - condition: template
-            value_template: >
-              {{ disable_sensors | length > 0 and (disable_sensors | select('is_state', 'on') | list | length > 0) }}
-        sequence:
+            value_template: "{{ disable_sensors | select('is_state', 'on') | list | length > 0 }}"
+        then:
+          # If any are 'on', stop the automation
           - stop:
 
   ###########################################################################
@@ -204,6 +209,5 @@ action:
           - service: light.turn_off
             target:
               entity_id: !input target_lights
-
 mode: queued
 max: 20
