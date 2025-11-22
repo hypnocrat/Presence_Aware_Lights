@@ -50,7 +50,7 @@ blueprint:
 
     manual_off_minutes:
       name: Manual OFF Override Duration (minutes)
-      default: 10
+      default: 15
       selector:
         number:
           min: 1
@@ -68,7 +68,7 @@ blueprint:
     sunset_offset:
       name: Sunset Offset (minutes)
       description: Offset the start of the time window. Use a negative number to start before sunset.
-      default: 0
+      default: -40
       selector:
         number:
           min: -120
@@ -78,7 +78,7 @@ blueprint:
     sunrise_offset:
       name: Sunrise Offset (minutes)
       description: Offset the end of the time window. Use a positive number to end after sunrise.
-      default: 0
+      default: 40
       selector:
         number:
           min: -120
