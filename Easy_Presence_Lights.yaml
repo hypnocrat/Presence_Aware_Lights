@@ -137,6 +137,16 @@ action:
                 - service: light.turn_on
                   target:
                     entity_id: "{{ repeat.item }}"
+                - delay: 00:00:01
+                - condition: state
+                  entity_id: "{{ repeat.item }}"
+                  state: 'on'
+                - service: input_boolean.turn_off
+                  target:
+                    entity_id: !input manual_override_on
+                - service: input_boolean.turn_off
+                  target:
+                    entity_id: !input manual_override_off
       - conditions:
           - condition: state
             entity_id: !input presence_sensor
@@ -148,6 +158,16 @@ action:
                 - service: light.turn_off
                   target:
                     entity_id: "{{ repeat.item }}"
+                - delay: 00:00:01
+                - condition: state
+                  entity_id: "{{ repeat.item }}"
+                  state: 'off'
+                - service: input_boolean.turn_off
+                  target:
+                    entity_id: !input manual_override_on
+                - service: input_boolean.turn_off
+                  target:
+                    entity_id: !input manual_override_off
 
 mode: restart
 max_exceeded: silent
