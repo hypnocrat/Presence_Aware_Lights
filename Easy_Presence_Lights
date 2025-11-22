@@ -1,0 +1,145 @@
+blueprint:
+  name: Presence Sensor Light Control with Manual Override
+  description: Control lights based on a presence sensor, with auto-off delay, manual override awareness, and optional disable sensors.
+  domain: automation
+  input:
+    presence_sensor:
+      name: Presence Sensor
+      description: The presence sensor that triggers the lights.
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class: occupancy
+    lights:
+      name: Lights
+      description: The lights to control.
+      selector:
+        target:
+          entity:
+            domain: light
+    auto_off_delay:
+      name: Auto-Off Delay
+      description: The delay before turning off the lights after the presence sensor goes off.
+      default: 300
+      selector:
+        number:
+          min: 0
+          max: 3600
+          unit_of_measurement: seconds
+    sunset_offset:
+      name: Sunset Offset
+      description: The offset in minutes from sunset to start the automation.
+      default: 0
+      selector:
+        number:
+          min: -60
+          max: 60
+          unit_of_measurement: minutes
+    sunrise_offset:
+      name: Sunrise Offset
+      description: The offset in minutes from sunrise to end the automation.
+      default: 0
+      selector:
+        number:
+          min: -60
+          max: 60
+          unit_of_measurement: minutes
+    disable_sensors:
+      name: Disable Sensors
+      description: Optional sensors that, when on, will disable the automation.
+      default: []
+      selector:
+        entity:
+          multiple: true
+          domain: binary_sensor
+    manual_override_on:
+      name: Manual Override On
+      description: Input boolean to track manual on state.
+      selector:
+        entity:
+          domain: input_boolean
+    manual_override_off:
+      name: Manual Override Off
+      description: Input boolean to track manual off state.
+      selector:
+        entity:
+          domain: input_boolean
+
+trigger:
+  - platform: state
+    entity_id: !input presence_sensor
+    to: 'on'
+  - platform: state
+    entity_id: !input presence_sensor
+    to: 'off'
+    for:
+      seconds: !input auto_off_delay
+  - platform: state
+    entity_id: !input lights
+    to: 'on'
+    id: manual_on
+  - platform: state
+    entity_id: !input lights
+    to: 'off'
+    id: manual_off
+
+condition:
+  - condition: or
+    conditions:
+      - condition: sun
+        after: sunset
+        after_offset: !input sunset_offset
+      - condition: sun
+        before: sunrise
+        before_offset: !input sunrise_offset
+  - condition: state
+    entity_id: !input disable_sensors
+    state: 'off'
+    for: 00:00:01
+    alias: "Disable Sensors Off"
+  - condition: state
+    entity_id: !input manual_override_on
+    state: 'off'
+  - condition: state
+    entity_id: !input manual_override_off
+    state: 'off'
+
+action:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: manual_on
+        sequence:
+          - service: input_boolean.turn_on
+            target:
+              entity_id: !input manual_override_on
+          - service: input_boolean.turn_off
+            target:
+              entity_id: !input manual_override_off
+      - conditions:
+          - condition: trigger
+            id: manual_off
+        sequence:
+          - service: input_boolean.turn_on
+            target:
+              entity_id: !input manual_override_off
+          - service: input_boolean.turn_off
+            target:
+              entity_id: !input manual_override_on
+      - conditions:
+          - condition: state
+            entity_id: !input presence_sensor
+            state: 'on'
+        sequence:
+          - service: light.turn_on
+            target: !input lights
+      - conditions:
+          - condition: state
+            entity_id: !input presence_sensor
+            state: 'off'
+        sequence:
+          - service: light.turn_off
+            target: !input lights
+
+mode: restart
+max_exceeded: silent
