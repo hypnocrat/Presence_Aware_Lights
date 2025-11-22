@@ -1,0 +1,62 @@
+blueprint:
+  name: Presence Management
+  description: Manages debounced presence detection and clearing for a room.
+  domain: automation
+  input:
+    presence_sensor:
+      name: Presence Sensor
+      description: The presence sensor to monitor.
+      selector:
+        entity:
+          domain: sensor
+    presence_boolean:
+      name: Presence Boolean
+      description: The input_boolean to toggle based on presence.
+      selector:
+        entity:
+          domain: input_boolean
+    debounce_delay:
+      name: Debounce Delay
+      description: The delay in seconds before clearing presence.
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 60
+          unit_of_measurement: seconds
+
+trigger:
+  - platform: state
+    entity_id: !input presence_sensor
+
+action:
+  - choose:
+      # Detect presence
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{
+                is_state(states(!input presence_sensor), 'motion') or
+                is_state(states(!input presence_sensor), 'stationary')
+              }}
+        sequence:
+          - service: input_boolean.turn_on
+            target:
+              entity_id: !input presence_boolean
+
+      # Clear presence
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{
+                is_state(states(!input presence_sensor), 'none')
+              }}
+        sequence:
+          - delay:
+              seconds: !input debounce_delay
+          - condition: template
+            value_template: >-
+              {{ not (is_state(states(!input presence_sensor), 'motion') or is_state(states(!input presence_sensor), 'stationary')) }}
+          - service: input_boolean.turn_off
+            target:
+              entity_id: !input presence_boolean
