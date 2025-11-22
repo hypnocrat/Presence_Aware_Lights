@@ -1,5 +1,5 @@
 blueprint:
-  name: Presence Sensor Light Control with Manual Override
+  name: Presence Sensor Light Control
   description: Control lights based on a presence sensor, with auto-off delay, manual override awareness, and optional disable sensors.
   domain: automation
   input:
