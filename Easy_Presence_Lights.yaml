@@ -1,6 +1,6 @@
 blueprint:
-  name: Presence Sensor Light Control with Manual Override
-  description: Control lights based on a presence sensor, with auto-off delay, manual override awareness, and optional disable sensors.
+  name: Easy Presence Lights
+  description: Control lights based on a presence sensor, with auto-off delay, manual override awareness, and optional disable sensors (think vacation mode, sleep mode...).
   domain: automation
   input:
     presence_sensor:
@@ -29,24 +29,24 @@ blueprint:
     sunset_offset:
       name: Sunset Offset
       description: The offset in minutes from sunset to start the automation. Use a negative value to start earlier.
-      default: 0
+      default: -40
       selector:
         number:
-          min: -60
-          max: 60
+          min: -120
+          max: 120
           unit_of_measurement: minutes
     sunrise_offset:
       name: Sunrise Offset
       description: The offset in minutes from sunrise to end the automation. Use a negative value to end earlier.
-      default: 0
+      default: 40
       selector:
         number:
-          min: -60
-          max: 60
+          min: -120
+          max: 120
           unit_of_measurement: minutes
     disable_sensors:
       name: Disable Sensors
-      description: Optional sensors that, when on, will disable the automation.
+      description: Optional binary sensors that, when on, will disable the automation. Define a sleep mode sensor, for example. 
       default: []
       selector:
         entity:
@@ -54,13 +54,13 @@ blueprint:
           domain: binary_sensor
     manual_override_on:
       name: Manual Override On
-      description: Input boolean to track manual on state.
+      description: Input boolean to track manual on state. You need to create "Toggle" helpers, either for your whole home or separate ones for each room. Cannot be the same as "off" helper!
       selector:
         entity:
           domain: input_boolean
     manual_override_off:
       name: Manual Override Off
-      description: Input boolean to track manual off state.
+      description: Input boolean to track manual off state. ou need to create "Toggle" helpers, either for your whole home or separate ones for each room. Cannot be the same as "on" helper!
       selector:
         entity:
           domain: input_boolean
