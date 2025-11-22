@@ -68,20 +68,8 @@ blueprint:
 trigger:
   - platform: state
     entity_id: !input presence_sensor
-    to: 'on'
-  - platform: state
-    entity_id: !input presence_sensor
-    to: 'off'
-    for:
-      seconds: !input auto_off_delay
   - platform: state
     entity_id: !input lights
-    to: 'on'
-    id: manual_on
-  - platform: state
-    entity_id: !input lights
-    to: 'off'
-    id: manual_off
 
 condition:
   - condition: or
@@ -105,31 +93,85 @@ condition:
     state: 'off'
 
 action:
+  - variables:
+      sensor: !input presence_sensor
+      lights: !input lights
+      off_delay: !input auto_off_delay
+      on_flag: !input manual_override_on
+      off_flag: !input manual_override_off
+      active_states: ["on"]
+
+  ###########################################################################
+  # 1 — Optional disable sensor
+  ###########################################################################
   - choose:
       - conditions:
-          - condition: trigger
-            id: manual_on
+          - condition: template
+            value_template: >
+              {{ disable_sensors | length > 0 and (disable_sensors | select('is_state', 'on') | list | length > 0) }}
+        sequence:
+          - stop:
+
+  ###########################################################################
+  # 2 — Manual ON override
+  ###########################################################################
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ trigger.entity_id in lights
+                 and trigger.to_state.state == 'on'
+                 and trigger.to_state.context.user_id is not none }}
         sequence:
           - service: input_boolean.turn_on
             target:
               entity_id: !input manual_override_on
+          - wait_for_trigger:
+              - platform: state
+                entity_id: !input presence_sensor
+                to: 'off'
+          - delay:
+              minutes: 5
           - service: input_boolean.turn_off
             target:
-              entity_id: !input manual_override_off
+              entity_id: !input manual_override_on
+          - stop:
+
+  ###########################################################################
+  # 3 — Manual OFF override
+  ###########################################################################
+  - choose:
       - conditions:
-          - condition: trigger
-            id: manual_off
+          - condition: template
+            value_template: >
+              {{ trigger.entity_id in lights
+                 and trigger.to_state.state == 'off'
+                 and trigger.to_state.context.user_id is not none }}
         sequence:
           - service: input_boolean.turn_on
             target:
               entity_id: !input manual_override_off
+          - wait_for_trigger:
+              - platform: state
+                entity_id: !input presence_sensor
+                to: 'on'
+          - delay:
+              minutes: 10
           - service: input_boolean.turn_off
             target:
-              entity_id: !input manual_override_on
+              entity_id: !input manual_override_off
+          - stop:
+
+  ###########################################################################
+  # 4 — Auto ON (blocked by OFF override)
+  ###########################################################################
+  - choose:
       - conditions:
-          - condition: state
-            entity_id: !input presence_sensor
-            state: 'on'
+          - condition: template
+            value_template: >
+              {{ is_state(off_flag, 'off')
+                 and trigger.entity_id == sensor
+                 and trigger.to_state.state in active_states }}
         sequence:
           - repeat:
               for_each: !input lights
@@ -137,37 +179,26 @@ action:
                 - service: light.turn_on
                   target:
                     entity_id: "{{ repeat.item }}"
-                - delay: 00:00:01
-                - condition: state
-                  entity_id: "{{ repeat.item }}"
-                  state: 'on'
-                - service: input_boolean.turn_off
-                  target:
-                    entity_id: !input manual_override_on
-                - service: input_boolean.turn_off
-                  target:
-                    entity_id: !input manual_override_off
+
+  ###########################################################################
+  # 5 — Auto OFF (blocked by ON override)
+  ###########################################################################
+  - choose:
       - conditions:
-          - condition: state
-            entity_id: !input presence_sensor
-            state: 'off'
+          - condition: template
+            value_template: >
+              {{ is_state(on_flag, 'off')
+                 and trigger.entity_id == sensor
+                 and trigger.to_state.state == 'off' }}
         sequence:
+          - delay:
+              seconds: !input auto_off_delay
           - repeat:
               for_each: !input lights
               sequence:
                 - service: light.turn_off
                   target:
                     entity_id: "{{ repeat.item }}"
-                - delay: 00:00:01
-                - condition: state
-                  entity_id: "{{ repeat.item }}"
-                  state: 'off'
-                - service: input_boolean.turn_off
-                  target:
-                    entity_id: !input manual_override_on
-                - service: input_boolean.turn_off
-                  target:
-                    entity_id: !input manual_override_off
 
-mode: restart
-max_exceeded: silent
+mode: queued
+max: 20
