@@ -1,108 +1,117 @@
 blueprint:
-  name: Easy Presence Lights
-  description: Control lights based on a presence sensor, with auto-off delay, manual override awareness, and optional disable sensors (think vacation mode, sleep mode...).
+  name: Easy presence lights
+  description: >
+    Controls lights based on an mmWave sensor, with dual manual overrides and a sunset-to-sunrise time window.
   domain: automation
+
   input:
     presence_sensor:
       name: Presence Sensor
-      description: The presence sensor that triggers the lights.
       selector:
         entity:
-          domain: binary_sensor
-          device_class: occupancy
-    lights:
+          domain: sensor
+
+    target_lights:
       name: Lights (multi-select)
-      description: The lights to control.
       selector:
         entity:
           domain: light
           multiple: true
-    auto_off_delay:
-      name: Auto-Off Delay
-      description: The delay before turning off the lights after the presence sensor goes off.
-      default: 300
+
+    off_delay:
+      name: Auto-off delay (seconds)
+      default: 30
       selector:
         number:
-          min: 0
-          max: 3600
+          min: 1
+          max: 600
           unit_of_measurement: seconds
-    sunset_offset:
-      name: Sunset Offset
-      description: The offset in minutes from sunset to start the automation. Use a negative value to start earlier.
-      default: -40
+
+    manual_on_override_flag:
+      name: Manual ON Override Boolean Helper
+      selector:
+        entity:
+          domain: input_boolean
+
+    manual_off_override_flag:
+      name: Manual OFF Override Boolean Helper
+      selector:
+        entity:
+          domain: input_boolean
+
+    manual_on_minutes:
+      name: Manual ON Override Duration (minutes)
+      default: 5
       selector:
         number:
-          min: -120
+          min: 1
           max: 120
           unit_of_measurement: minutes
-    sunrise_offset:
-      name: Sunrise Offset
-      description: The offset in minutes from sunrise to end the automation. Use a negative value to end earlier.
-      default: 40
+
+    manual_off_minutes:
+      name: Manual OFF Override Duration (minutes)
+      default: 10
       selector:
         number:
-          min: -120
-          max: 120
+          min: 1
+          max: 240
           unit_of_measurement: minutes
+
     disable_sensors:
-      name: Disable Sensors
-      description: Optional binary sensors that, when on, will disable the automation. Define a sleep mode sensor, for example. 
-      default: []
+      name: Optional Disable Sensors
+      description: If any of these sensors are ON, automation is disabled.
       selector:
         entity:
-          multiple: true
           domain: binary_sensor
-    manual_override_on:
-      name: Manual Override On
-      description: Input boolean to track manual on state. You need to create "Toggle" helpers, either for your whole home or separate ones for each room. Cannot be the same as "off" helper!
+          multiple: true
+
+    sunset_offset:
+      name: Sunset Offset (minutes)
+      description: Offset the start of the time window. Use a negative number to start before sunset.
+      default: 0
       selector:
-        entity:
-          domain: input_boolean
-    manual_override_off:
-      name: Manual Override Off
-      description: Input boolean to track manual off state. ou need to create "Toggle" helpers, either for your whole home or separate ones for each room. Cannot be the same as "on" helper!
+        number:
+          min: -120
+          max: 120
+          unit_of_measurement: minutes
+
+    sunrise_offset:
+      name: Sunrise Offset (minutes)
+      description: Offset the end of the time window. Use a positive number to end after sunrise.
+      default: 0
       selector:
-        entity:
-          domain: input_boolean
+        number:
+          min: -120
+          max: 120
+          unit_of_measurement: minutes
 
 trigger:
   - platform: state
     entity_id: !input presence_sensor
   - platform: state
-    entity_id: !input lights
+    entity_id: !input target_lights
 
 condition:
-  - condition: or
-    conditions:
-      - condition: sun
-        after: sunset
-        after_offset: !input sunset_offset
-      - condition: sun
-        before: sunrise
-        before_offset: !input sunrise_offset
-  - condition: state
-    entity_id: !input disable_sensors
-    state: 'off'
-    for: 00:00:01
-    alias: "Disable Sensors Off"
-  - condition: state
-    entity_id: !input manual_override_on
-    state: 'off'
-  - condition: state
-    entity_id: !input manual_override_off
-    state: 'off'
+  - condition: sun
+    after: sunset
+    after_offset: !input sunset_offset
+    before: sunrise
+    before_offset: !input sunrise_offset
 
 action:
   - variables:
       sensor: !input presence_sensor
-      lights: !input lights
-      off_delay: !input auto_off_delay
-      on_flag: !input manual_override_on
-      off_flag: !input manual_override_off
-      active_states: ["on"]
+      lights: !input target_lights
+      off_delay: !input off_delay
+      on_flag: !input manual_on_override_flag
+      off_flag: !input manual_off_override_flag
+      on_minutes: !input manual_on_minutes
+      off_minutes: !input manual_off_minutes
+      disable_sensors: !input disable_sensors
+      active_states: ["occupied"]
 
   ###########################################################################
-  # 1 — Optional disable sensor
+  # 1 — Optional disable sensors
   ###########################################################################
   - choose:
       - conditions:
@@ -125,16 +134,15 @@ action:
         sequence:
           - service: input_boolean.turn_on
             target:
-              entity_id: !input manual_override_on
+              entity_id: !input manual_on_override_flag
           - wait_for_trigger:
-              - platform: state
-                entity_id: !input presence_sensor
-                to: 'off'
+              - platform: template
+                value_template: "{{ is_state(sensor, 'clear') }}"
           - delay:
-              minutes: 5
+              minutes: !input manual_on_minutes
           - service: input_boolean.turn_off
             target:
-              entity_id: !input manual_override_on
+              entity_id: !input manual_on_override_flag
           - stop:
 
   ###########################################################################
@@ -150,16 +158,15 @@ action:
         sequence:
           - service: input_boolean.turn_on
             target:
-              entity_id: !input manual_override_off
+              entity_id: !input manual_off_override_flag
           - wait_for_trigger:
-              - platform: state
-                entity_id: !input presence_sensor
-                to: 'on'
+              - platform: template
+                value_template: "{{ is_state(sensor, 'clear') }}"
           - delay:
-              minutes: 10
+              minutes: !input manual_off_minutes
           - service: input_boolean.turn_off
             target:
-              entity_id: !input manual_override_off
+              entity_id: !input manual_off_override_flag
           - stop:
 
   ###########################################################################
@@ -171,14 +178,12 @@ action:
             value_template: >
               {{ is_state(off_flag, 'off')
                  and trigger.entity_id == sensor
+                 and trigger.from_state.state == 'clear'
                  and trigger.to_state.state in active_states }}
         sequence:
-          - repeat:
-              for_each: !input lights
-              sequence:
-                - service: light.turn_on
-                  target:
-                    entity_id: "{{ repeat.item }}"
+          - service: light.turn_on
+            target:
+              entity_id: !input target_lights
 
   ###########################################################################
   # 5 — Auto OFF (blocked by ON override)
@@ -189,16 +194,16 @@ action:
             value_template: >
               {{ is_state(on_flag, 'off')
                  and trigger.entity_id == sensor
-                 and trigger.to_state.state == 'off' }}
+                 and trigger.to_state.state == 'clear'
+                 and states(sensor) not in active_states }}
         sequence:
           - delay:
-              seconds: !input auto_off_delay
-          - repeat:
-              for_each: !input lights
-              sequence:
-                - service: light.turn_off
-                  target:
-                    entity_id: "{{ repeat.item }}"
+              seconds: !input off_delay
+          - condition: template
+            value_template: "{{ is_state(sensor, 'clear') }}"
+          - service: light.turn_off
+            target:
+              entity_id: !input target_lights
 
 mode: queued
 max: 20
